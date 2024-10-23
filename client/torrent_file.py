@@ -1,6 +1,50 @@
 from typing import List, Optional
 
 
+class TrackerInfo:
+    def __init__(
+        self,
+        announce: str,
+        complete: int,
+        incomplete: int,
+        interval: int,
+        min_interval: int,
+        peers: List[str],
+    ) -> None:
+        self._announce: str = announce
+        self._complete: int = complete
+        self._incomplete: int = incomplete
+        self._interval: int = interval
+        self._min_interval: int = min_interval
+        self._peers: List[str] = peers
+
+    def get_announce(self) -> str:
+        return self._announce if self._announce else None
+
+    def get_complete(self) -> int:
+        return self._complete if self._complete is not None else None
+
+    def get_incomplete(self) -> int:
+        return self._incomplete if self._incomplete is not None else None
+
+    def get_interval(self) -> int:
+        return self._interval if self._interval is not None else None
+
+    def get_min_interval(self) -> int:
+        return self._min_interval if self._min_interval is not None else None
+
+    def get_peers(self) -> List[str]:
+        return self._peers if self._peers else None
+
+
+    def __str__(self) -> str:
+        return (
+            f"TrackerInfo(announce={self._announce}, complete={self._complete}, "
+            f"incomplete={self._incomplete}, interval={self._interval}, "
+            f"min_interval={self._min_interval}, peers={self._peers}"
+        )
+
+
 class File:
     def __init__(self, length: int, path: List[str]) -> None:
         self._length: int = length
@@ -70,6 +114,7 @@ class TorrentFile:
         self._encoding: Optional[str] = None
         self._url_list: List[str] = []
         self._info: Optional[TorrentInfo] = None
+        self._tracker_info: Optional[TrackerInfo] = None
         self._info_hash: Optional[str] = None
 
     def get_announce(self) -> Optional[str]:
@@ -95,6 +140,9 @@ class TorrentFile:
 
     def get_info(self) -> Optional[TorrentInfo]:
         return self._info
+
+    def get_tracker_info(self) -> Optional[TrackerInfo]:
+        return self._tracker_info
 
     def get_info_hash(self) -> Optional[str]:
         return self._info_hash
@@ -123,6 +171,9 @@ class TorrentFile:
     def set_info(self, info: TorrentInfo) -> None:
         self._info = info
 
+    def set_tracker_info(self, tracker_info: TrackerInfo) -> None:
+        self._tracker_info = tracker_info
+
     def set_info_hash(self, info_hash: str) -> None:
         self._info_hash = info_hash
 
@@ -131,5 +182,6 @@ class TorrentFile:
             f"TorrentFile(announce={self._announce}, announce_list={self._announce_list}, "
             f"comment={self._comment}, created_by={self._created_by}, "
             f"creation_date={self._creation_date}, encoding={self._encoding}, "
-            f"url_list={self._url_list}, info={self._info}), info_hash={self._info_hash}"
+            f"url_list={self._url_list}, info={self._info}, "
+            f"tracker_info={self._tracker_info}, info_hash={self._info_hash})"
         )
