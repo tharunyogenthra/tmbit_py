@@ -6,11 +6,11 @@ import hashlib
 
 class Testing(unittest.TestCase):        
     def get_file_hash(self, file_path):
-            sha1 = hashlib.sha1()
-            with open(file_path, "rb") as f:
-                while chunk := f.read(8192):
-                    sha1.update(chunk)
-            return sha1.hexdigest()
+        sha1 = hashlib.sha1()
+        with open(file_path, "rb") as f:
+            while chunk := f.read(8192):
+                sha1.update(chunk)
+        return sha1.hexdigest()
         
     def test_peer_handshake_works_for_sample(self):
         ptf = parse_torrent_file("tests/torrents/sample.torrent")

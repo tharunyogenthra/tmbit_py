@@ -2,6 +2,7 @@ import os
 import socket
 from client.torrent_file import TorrentFile, TorrentInfo, File
 from client.tracker import TrackerInfo, tracker_request
+import hashlib
 
 def download(torrentFile: TorrentFile) -> None:
     data = peer_handshake(torrentFile)
@@ -88,6 +89,10 @@ def peer_handshake(torrentFile: TorrentFile):
             piece_index = 0
             piece_counter = 0
             default_block_size = 2**14
+            pieces_expected = torrentFile.get_info().get_pieces()
+            piece = b''
+            pieces_actual = []
+            
             for _ in range(0, file_length, piece_length):
             
                 for offset in range(0, piece_length, default_block_size):
@@ -113,20 +118,30 @@ def peer_handshake(torrentFile: TorrentFile):
                     sock.sendall(piece_request_message)
                     
                     def receive_message(res):
-                        length = res.recv(4)
-                        while not length or not int.from_bytes(length, byteorder='big'):
-                            length = res.recv(4)
-                        message = res.recv(int.from_bytes(length, byteorder='big'))
-                        while len(message) < int.from_bytes(length, byteorder='big'):
-                            message += res.recv(int.from_bytes(length, byteorder='big') - len(message))
-                        return length + message
+                        length_msg = res.recv(4)
+                        while not length_msg or not int.from_bytes(length_msg, byteorder='big'):
+                            length_msg = res.recv(4)
+                        message = res.recv(int.from_bytes(length_msg, byteorder='big'))
+                        while len(message) < int.from_bytes(length_msg, byteorder='big'):
+                            message += res.recv(int.from_bytes(length_msg, byteorder='big') - len(message))
+                        return length_msg + message
                     
                     message = receive_message(sock)
-     
+                    piece += message[13:]
+                    # hash message
                     data.extend(message[13:])
 
+                pieces_actual.append(hashlib.sha1(piece).hexdigest())
+                piece = b'' # resetting it every piece
                 piece_index += 1
-                
+            
+            
+            # verify download
+            if (len(pieces_actual) != len(pieces_expected)):
+                print("ERROR download")
+            for i in range(0, len(pieces_actual)):
+                if (pieces_actual[i] != pieces_expected[i]):
+                    print("Download failed")
                 
             sock.close()
             return data
