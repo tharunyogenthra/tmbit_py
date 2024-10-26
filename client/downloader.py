@@ -3,7 +3,7 @@ import socket
 from client.torrent_file import TorrentFile, TorrentInfo, File
 from client.tracker import TrackerInfo, tracker_request
 
-def download(torrentFile: TorrentFile):
+def download(torrentFile: TorrentFile) -> None:
     data = peer_handshake(torrentFile)
     os.makedirs("tmp_torrent", exist_ok=True)
     fp = os.path.join("tmp_torrent", "out.bin")
