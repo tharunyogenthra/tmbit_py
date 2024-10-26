@@ -3,25 +3,20 @@ import requests
 from client.torrent_file import TorrentFile, TrackerInfo
 from client.parse import parse_tracker_response
 
-
-import subprocess
-
-import subprocess
-
 def ping_url(url):
     domain = url.split("//")[-1].split("/")[0].split(":")[0]
     try:
         with subprocess.Popen(["ping", domain], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True) as process:
             first_line = process.stdout.readline().strip()  
-            # print(first_line)
+            print(first_line)
             if "PING" in first_line:  
-                # print(f"Ping to {domain} successful.")
+                print(f"Ping to {domain} successful.")
                 return True
             else:
-                # print(f"Ping to {domain} failed.")
+                print(f"Ping to {domain} failed.")
                 return False
     except Exception as e:
-        # print(f"An error occurred while pinging {domain}: {e}")
+        print(f"An error occurred while pinging {domain}: {e}")
         return False
 
 
@@ -59,10 +54,11 @@ def tracker_request(torrent: TorrentFile):
 
         try:
             response = requests.get(tracker_url, params=params, timeout=3)
+            # print(f"Response {response}")
 
             if response.status_code == 200:
-                # print(f"Successfully contacted tracker: {tracker_url}")
-                # print(response.content)
+                print(f"Successfully contacted tracker: {tracker_url}")
+                print(response.content)
 
                 response_dict = parse_tracker_response(response.content)
 
@@ -80,22 +76,22 @@ def tracker_request(torrent: TorrentFile):
                 return torrent.get_tracker_info()
 
             else:
-                # print(
-                #     f"Tracker request failed {tracker_request}"
-                # )
+                print(
+                    f"Tracker request failed {tracker_request}"
+                )
                 pass
 
         except requests.Timeout:
             # Realistically will never happen
-            # print(f"Tracker request to {tracker_url} timed out.")
+            print(f"Tracker request to {tracker_url} timed out.")
             pass
         except requests.RequestException as e:
-            # print(
-            #     f"An error occurred while making the tracker request to {tracker_url}: {e}"
-            # )
+            print(
+                f"An error occurred while making the tracker request to {tracker_url}: {e}"
+            )
             pass
 
-    # print("No valid HTTP tracker could be contacted.")
+    print("No valid HTTP tracker could be contacted.")
     return None
 
 
