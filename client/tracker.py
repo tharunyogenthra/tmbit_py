@@ -1,7 +1,7 @@
 import subprocess
 import requests
-from client.torrent_file import TorrentFile, TrackerInfo
-from client.parse import parse_tracker_response
+from .torrent_file import TorrentFile, TrackerInfo
+from .parse import parse_tracker_response
 
 def ping_url(url):
     domain = url.split("//")[-1].split("/")[0].split(":")[0]

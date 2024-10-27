@@ -1,6 +1,6 @@
 import os
 import bencoding
-from client.torrent_file import TorrentFile, TorrentInfo, File
+from .torrent_file import TorrentFile, TorrentInfo, File
 import hashlib
 from typing import List
 
