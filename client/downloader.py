@@ -1,154 +1,166 @@
 import os
 import socket
-from client.torrent_file import TorrentFile, TorrentInfo, File
-from client.tracker import TrackerInfo, tracker_request
+from client.torrent_file import TorrentFile
+from client.tracker import tracker_request
 import hashlib
+import time
 
-def download(torrentFile: TorrentFile) -> None:
-    data = peer_handshake(torrentFile)
+def download(torrentFile: TorrentFile):
+    peers_piece_dict = connect_to_peers(torrentFile, {i: b'' for i in range(len(torrentFile.get_info().get_pieces()))})
+    
     os.makedirs("tmp_torrent", exist_ok=True)
+    
     fp = os.path.join("tmp_torrent", "out.bin")
     
     with open(fp, 'wb') as file:
-        file.write(data)
-
-
-def peer_handshake_msg(torrentFile: TorrentFile):        
-    bittorrent_protocol_string = b"BitTorrent protocol"
-    reserved = b'\x00' * 8
-
-    info_hash = bytes.fromhex(torrentFile.get_info_hash())
-    peer_id = os.urandom(20) 
-
-
-    handshake_msg = (
-        b'\x13' +
-        bittorrent_protocol_string + 
-        reserved + 
-        info_hash + 
-        peer_id 
-    )
-
-    return handshake_msg
+        for pieces in peers_piece_dict.items():
+            file.write(pieces[1])
     
+    return peers_piece_dict
 
-def peer_handshake(torrentFile: TorrentFile):    
-    if torrentFile.get_tracker_info() is None:
-        tracker_request(torrentFile)
-
-    print("Attempting handshake with peer")
-
+def receive_message(sock: socket.socket):
     try:
-        tracker_info = torrentFile.get_tracker_info().get_peers()[0]
-        print("Peer tracker info:", tracker_info)
+        length_msg = sock.recv(4)
+        if not length_msg or not int.from_bytes(length_msg, byteorder='big'):
+            return None
         
-        address, port = tracker_info.split(":")
-        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        # variable time limit
-        sock.settimeout(60)
+        message_length = int.from_bytes(length_msg, byteorder='big')
+        message = sock.recv(message_length)
+        
+        while len(message) < message_length:
+            chunk = sock.recv(message_length - len(message))
+            if not chunk:
+                break
+            message += chunk
+            
+        return length_msg + message
+    except socket.error as e:
+        print(f"Socket error while receiving message: {e}")
+        return None
 
-        print(f"Connecting to peer at {address}:{port}")
-        sock.connect((address, int(port)))
 
-        handshake_msg = peer_handshake_msg(torrentFile)
-        sock.send(handshake_msg)
-        
-        response = sock.recv(68)
-        print("Received handshake response:", response)
-        
-    except ConnectionRefusedError:
-        print("Connection refused by peer.")
-        # have to find another peer and if that doesnt work get a new announce
-    except socket.timeout:
-        print("Connection attempt timed out.")
-    except OSError as e:
-        print(f"Socket error: {e}")
+            
+def peer_handshake_msg(torrentFile: TorrentFile):
+    bittorrent_protocol_string = b"BitTorrent protocol"
+    reserved = b"\x00" * 8
+    info_hash = bytes.fromhex(torrentFile.get_info_hash())
+    peer_id = os.urandom(20)
+    return b"\x13" + bittorrent_protocol_string + reserved + info_hash + peer_id
+
+def interested_msg():
+    return b'\x00\x00\x00\x01\x02'
+
+def connect_to_peers(torrentFile: TorrentFile, pieces_dict):
+    peers = [domain.split(":") for domain in torrentFile.get_peers()]
     
-    # vary this size
-    bitfield_msg = sock.recv(1024)
-    # check pieces later
-    print(f"bitfield_msg\nlen={bitfield_msg[0:4]}\nmessage id={bitfield_msg[4:5]}\npayload={bitfield_msg[5:]}")
-    print(f"Size rec of pieces is {len(torrentFile.get_info().get_pieces())}")
-    # if msg id is 5
-    # for now assume that this tracker has all pieces
-    if bitfield_msg[4:5] == b'\x05':
-        interest_msg = (
-            b'\x00\x00\x00\x01' + 
-            b'\x02'
-        )
-        sock.send(interest_msg)
-        unchoke_msg = sock.recv(1024)
-        print(f"unchoke_msg msgid = {unchoke_msg}")
-        # If msg id is 1 for unchoke we good; payload is normally empty
-        if unchoke_msg[4:5] == b'\x01':
-            # Time to request for pieces
-            # piece size for eg is 32kib but we can only req 16kib each time
-            file_length = sum([file.get_length() for file in torrentFile.get_info().get_files()])
-            piece_length = torrentFile.get_info().get_piece_length() 
-            data = bytearray()
-            piece_index = 0
-            piece_counter = 0
-            default_block_size = 2**14
-            pieces_expected = torrentFile.get_info().get_pieces()
-            piece = b''
-            pieces_actual = []
-            
-            for _ in range(0, file_length, piece_length):
-            
-                for offset in range(0, piece_length, default_block_size):
-                    if ((file_length - (default_block_size * piece_counter)) < default_block_size):
-                        request_length = file_length - (default_block_size * piece_counter)
-                    else:
-                        request_length = default_block_size
-                        
-                    piece_counter += 1 
-                    piece_request_message = (
-                        (13).to_bytes(4, byteorder='big') + 
-                        b'\x06' + 
-                        piece_index.to_bytes(4, byteorder='big') + 
-                        offset.to_bytes(4, byteorder='big') +      
-                        request_length.to_bytes(4, byteorder='big') 
-                    )
-                    
-                    # import struct
-                    # print("Requesting block, with payload:")
-                    # print(piece_request_message)
-                    # print(struct.unpack(">IBIII", piece_request_message))
-                    
-                    sock.sendall(piece_request_message)
-                    
-                    def receive_message(res):
-                        length_msg = res.recv(4)
-                        while not length_msg or not int.from_bytes(length_msg, byteorder='big'):
-                            length_msg = res.recv(4)
-                        message = res.recv(int.from_bytes(length_msg, byteorder='big'))
-                        while len(message) < int.from_bytes(length_msg, byteorder='big'):
-                            message += res.recv(int.from_bytes(length_msg, byteorder='big') - len(message))
-                        return length_msg + message
-                    
-                    message = receive_message(sock)
-                    piece += message[13:]
-                    # hash message
-                    data.extend(message[13:])
+    for address, port in [(ele[0], int(ele[1])) for ele in peers]:
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.settimeout(10)
 
-                pieces_actual.append(hashlib.sha1(piece).hexdigest())
-                piece = b'' # resetting it every piece
-                piece_index += 1
+        try:
+            print(f"Attempting to connect to peer at {address}:{port}")
+            sock.connect((address, port))
+
+            handshake_msg = peer_handshake_msg(torrentFile)
+            sock.send(handshake_msg)
+
+            response = sock.recv(68)
+            if not response:
+                print(f"No response from {address}:{port}, closing socket.")
+                sock.close()
+                continue
             
-            
-            # verify download
-            if (len(pieces_actual) != len(pieces_expected)):
-                print("ERROR download")
-            for i in range(0, len(pieces_actual)):
-                if (pieces_actual[i] != pieces_expected[i]):
-                    print("Download failed")
+            print(f"Received handshake response from {address}:{port}:", response)
+            if response != b'':
+                sock.settimeout(30)
+                # this will need to be adjusted for massive files might have to do a realloc
+                bitfield_msg = sock.recv(512)
+                binary_piece = bin(int.from_bytes(bitfield_msg[5:], 'big'))[2:2+len(torrentFile.get_info().get_pieces())]
                 
+                print(f"All pieces avaiable are {binary_piece}")
+                # might have to call it repeatedly
+                sock.send(interested_msg())
+                unchoke_msg = sock.recv(10)
+                print(f"unchoke is {unchoke_msg}")
+                if unchoke_msg[4:5] != b'\x01':
+                    print("Peer did not unchoke us, trying next peer")
+                    sock.close()
+                    # fuck this peer we are moving on
+                    continue
+                
+                print(f"{address}:{port} unchoked; beginning piece downloads")
+                
+                for piece_index, ele in pieces_dict.items():
+                    if (binary_piece[piece_index] == "1" and ele == b''):
+                        # pieces_dict[piece_index] = download_piece()
+                        # if it downloads then very good
+                        # if it doesnt download for any cancer error just move along
+
+                        total_length = sum(file.get_length() for file in torrentFile.get_info().get_files())
+                        piece_length = torrentFile.get_info().get_piece_length()
+                        pieces_expected = torrentFile.get_info().get_pieces()
+                        default_block_size = 2**14
+                        
+                        piece = bytearray()
+                        current_piece_length = (
+                            total_length - (piece_index * piece_length)
+                            if piece_index == len(pieces_expected) - 1
+                            else piece_length
+                        )
+                        
+                        print(f"Downloading piece {piece_index + 1}/{len(pieces_expected)}")
+                        
+                        for offset in range(0, current_piece_length, default_block_size):
+                            remaining = current_piece_length - offset
+                            request_length = min(default_block_size, remaining)
+
+                            request_msg = (
+                                (13).to_bytes(4, byteorder='big') +
+                                b'\x06' +
+                                piece_index.to_bytes(4, byteorder='big') +
+                                offset.to_bytes(4, byteorder='big') +
+                                request_length.to_bytes(4, byteorder='big')
+                            )
+
+                            sock.sendall(request_msg)
+
+                            message = receive_message(sock)
+                            if not message or message[4:5] != b'\x07':
+                                # if it breaks halfway through dict should be intact and we just go next peers
+                                # print(f"message is {message}")
+                                print(f"Unexpected or empty message, skipping peer")
+                                sock.close()
+                                continue
+                            
+                            piece.extend(message[13:])
+                            
+                        piece = bytes(piece)
+                        pieces_dict[piece_index] = piece
+                        
+                    if not any(len(val) == 0 for val in pieces_dict.values()):
+                        pieces_meta = torrentFile.get_info().get_pieces()
+                        if (len(pieces_meta) != len(pieces_dict)):
+                            print("Download got messed up")
+                            break
+                            
+                        for i in range(0, len(pieces_dict)):
+                            if (pieces_meta[i] != hashlib.sha1(pieces_dict[i]).hexdigest()):
+                                print(f"Hashes are wrong at {i}")
+                                break
+
+                print("File finished")
+                bitfield_msg, binary_piece = None, None
+                break
+                
+        except socket.timeout:
+            print(f"Connection timed out for peer at {address}:{port}.")
+        except Exception as e:
+            print(f"Unexpected error with peer at {address}:{port}: {e}")
+        finally:
             sock.close()
-            return data
-            
-        else:
-            print("The message if for message is not 1")
-            sock.close()
-    else:
-        print("The message id for message is not 5")
-        sock.close()
+
+    if (any(value == b'' for value in pieces_dict.values())):
+        tracker_request(torrentFile, 10)
+        connect_to_peers(torrentFile, pieces_dict)
+        print("Aww shit here we go again")
+    return pieces_dict
