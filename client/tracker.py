@@ -3,111 +3,149 @@ import requests
 from .torrent_file import TorrentFile, TrackerInfo
 from .parse import parse_tracker_response
 
-def ping_url(url):
-    domain = url.split("//")[-1].split("/")[0].split(":")[0]
-    try:
-        with subprocess.Popen(["ping", domain], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True) as process:
-            first_line = process.stdout.readline().strip()  
-            print(first_line)
-            if "PING" in first_line:  
-                print(f"Ping to {domain} successful.")
-                return True
-            else:
-                print(f"Ping to {domain} failed.")
-                return False
-    except Exception as e:
-        print(f"An error occurred while pinging {domain}: {e}")
-        return False
+import socket
+import bencoding
+import random
+import threading
+import time
 
 
+class DHT_client:
+    def __init__(self, listen_port=6881):
+        self.listen_port = listen_port
+        self.node_id = self.generate_node_id()
+        self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        self.sock.bind(("0.0.0.0", listen_port))
+        self.sock.setblocking(False)
+        self.peers = set()
+        self.bootstrap_nodes = [
+            ("router.bittorrent.com", 6881),
+            ("dht.transmissionbt.com", 6881),
+            ("router.utorrent.com", 6881),
+        ]
+        self.transaction_id = 0
 
-def tracker_request(torrent: TorrentFile):
-    info_hash = bytes.fromhex(torrent.get_info_hash())
+    def generate_node_id(self):
+        return random.randbytes(20)
 
-    if len(torrent.get_info().get_files()) != 1:
-        left_download = sum(
-            list(map(lambda f: f.get_length(), torrent.get_info().get_files()))
-        )
-    else:
-        left_download = torrent.get_info().get_files()[0].get_length()
+    def get_transaction_id(self):
+        self.transaction_id += 1
+        return str(self.transaction_id).encode()
 
-    all_urls = [torrent.get_announce()] + torrent.get_announce_list()
-
-    for tracker_url in all_urls:
-        if not tracker_url.startswith("http"):
-            continue
-
-
-        if not ping_url(tracker_url):
-            # print(f"Skipping tracker {tracker_url}")
-            continue
-
-        params = {
-            "info_hash": info_hash,
-            "peer_id": "-THARUN-easteregglol",
-            "port": 6841,
-            "uploaded": 0,
-            "downloaded": 0,
-            "left": left_download,
-            "compact": "1",
-        }
-
+    def send(self, message, addr):
         try:
-            response = requests.get(tracker_url, params=params, timeout=3)
-            # print(f"Response {response}")
+            encoded_message = bencoding.bencode(message)
+            self.sock.sendto(encoded_message, addr)
+        except Exception as e:
+            pass
 
-            if response.status_code == 200:
-                print(f"Successfully contacted tracker: {tracker_url}")
-                print(response.content)
+    def decode_peers(self, peers_data):
+        peers = []
+        if len(peers_data) % 6 != 0:
+            return peers
 
-                response_dict = parse_tracker_response(response.content)
+        for i in range(0, len(peers_data), 6):
+            peer = peers_data[i : i + 6]
+            ip = ".".join(str(b) for b in peer[:4])
+            port = (peer[4] << 8) + peer[5]
+            peers.append((ip, port))
+        return peers
 
-                torrent.set_tracker_info(
-                    TrackerInfo(
-                        tracker_url,
-                        response_dict.get(b"complete", None),
-                        response_dict.get(b"incomplete", None),
-                        response_dict.get(b"interval", None),
-                        response_dict.get(b"min interval", None),
-                        extract_peers(response_dict.get(b"peers", None)),
-                    )
-                )
-
-                return torrent.get_tracker_info()
-
-            else:
-                print(
-                    f"Tracker request failed {tracker_request}"
-                )
+    def receive(self):
+        while True:
+            try:
+                data, addr = self.sock.recvfrom(4096)
+                try:
+                    response = bencoding.bdecode(data)
+                    self.handle_response(response)
+                except Exception as e:
+                    pass
+            except BlockingIOError:
+                continue
+            except Exception as e:
                 pass
 
-        except requests.Timeout:
-            # Realistically will never happen
-            print(f"Tracker request to {tracker_url} timed out.")
+    def handle_response(self, response):
+        try:
+            if b"y" not in response:
+                return
+
+            if response[b"y"] == b"r" and b"r" in response:
+                r = response[b"r"]
+                if b"values" in r:
+                    for peers_data in r[b"values"]:
+                        new_peers = self.decode_peers(peers_data)
+                        for peer in new_peers:
+                            if peer[1] > 1024:
+                                self.peers.add(peer)
+                if b"nodes" in r:
+                    nodes = self.decode_nodes(r[b"nodes"])
+                    for node in nodes:
+                        self.get_peers_from_node(node)
+            elif response[b"y"] == b"e":
+                pass
+        except Exception as e:
             pass
-        except requests.RequestException as e:
-            print(
-                f"An error occurred while making the tracker request to {tracker_url}: {e}"
-            )
-            pass
 
-    print("No valid HTTP tracker could be contacted.")
-    return None
+    def decode_nodes(self, nodes_data):
+        nodes = []
+        if len(nodes_data) % 26 != 0:
+            return nodes
+
+        for i in range(0, len(nodes_data), 26):
+            node = nodes_data[i : i + 26]
+            node_id = node[:20]
+            ip = ".".join(str(b) for b in node[20:24])
+            port = (node[24] << 8) + node[25]
+            nodes.append((node_id, ip, port))
+        return nodes
+
+    def get_peers_from_node(self, node):
+        _, ip, port = node
+        msg = {
+            b"t": self.get_transaction_id(),
+            b"y": b"q",
+            b"q": b"get_peers",
+            b"a": {b"id": self.node_id, b"info_hash": self.info_hash},
+        }
+        self.send(msg, (ip, port))
+
+    def find_nodes(self):
+        msg = {
+            b"t": self.get_transaction_id(),
+            b"y": b"q",
+            b"q": b"find_node",
+            b"a": {b"id": self.node_id, b"target": self.generate_node_id()},
+        }
+        for node in self.bootstrap_nodes:
+            self.send(msg, node)
+
+    def run(self, info_hash, duration):
+        self.info_hash = info_hash
+        receive_task = threading.Thread(target=self.receive)
+        receive_task.daemon = True
+        receive_task.start()
+        self.find_nodes()
+        time.sleep(duration)
+
+    def get_successful_peers(self):
+        return self.peers
+
+    def close(self):
+        self.sock.close()
 
 
-def extract_peers(peers: bytes):
-    if peers is None:
-        return []
-
-    peers_list = []
-
-    for i in range(0, len(peers), 6):
-        ip_bytes = peers[i : i + 4]
-        ip_address = ".".join(str(b) for b in ip_bytes)
-
-        port_bytes = peers[i + 4 : i + 6]
-        port = int.from_bytes(port_bytes, byteorder="big")
-
-        peers_list.append(f"{ip_address}:{port}")
-
-    return peers_list
+def tracker_request(torrent, duration=5):
+    info_hash = bytes.fromhex(torrent.get_info_hash())
+    dht_client = DHT_client()
+    dht_client.run(info_hash, duration)
+    successful_peers = dht_client.get_successful_peers()
+    dht_client.close()
+    print(successful_peers)
+    torrent.set_peers(
+        [
+            ":".join([str(addr_port_pair) for addr_port_pair in domains])
+            for domains in successful_peers
+        ]
+    )
+    return successful_peers
