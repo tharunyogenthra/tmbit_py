@@ -1,8 +1,3 @@
-import subprocess
-import requests
-from .torrent_file import TorrentFile, TrackerInfo
-from .parse import parse_tracker_response
-
 import socket
 import bencoding
 import random
