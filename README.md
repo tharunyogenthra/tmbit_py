@@ -29,3 +29,5 @@ From here it’s quite intuitive using the GUI and the output will be written to
 access all torrents downloaded using our client 
 
 # Usage Demonstration
+
+![Demonstration](docs/tmbit_demo.gif)
