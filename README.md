@@ -1,6 +1,6 @@
 # tmbit_py
 
-**tmbit_py** is an extremely lightweight, leech-only torrent client built for the **Extended Security Engineering and Cybersecurity (COMP6841)** course at **UNSW**. This client provides the fundamental features necessary for torrenting, with a focus on security and simplicity.
+**tmbit_py** is an extremely lightweight, leech-only torrent client built for the **Extended Security Engineering and Cybersecurity (COMP6841)** course at **UNSW**. This client provides the fundamental features necessary for torrenting, with a focus on security and simplicity. Downloading one file at a time is a current limit of ours and it is recommended to try and not bypass this.
 
 ## Features
 
