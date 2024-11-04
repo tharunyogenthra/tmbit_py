@@ -7,16 +7,28 @@ from client.parse import parse_torrent_file
 from client.downloader import download
 
 class DownloadThread(QThread):
-    update_signal = pyqtSignal(str)  # For text updates
-    progress_signal = pyqtSignal(int, int)  # For progress updates (current, total)
-    completed_signal = pyqtSignal(bool)  # Modified to include success status
+    update_signal = pyqtSignal(str)
+    progress_signal = pyqtSignal(int, int)
+    completed_signal = pyqtSignal(bool)
     
     def __init__(self, torrent_file):
         super().__init__()
         self.torrent_file = torrent_file
+        
+        # Add debug logging
+        pieces = self.torrent_file.get_info().get_pieces()
+        piece_count = len(pieces) if pieces else 0
+        print(f"Debug - Total pieces: {piece_count}")
+        print(f"Debug - Pieces data: {pieces[:10]}...")  # Print first 10 pieces
+        
+        self.total_pieces = piece_count
         self.current_piece = 0
-        self.total_pieces = len(torrent_file.get_info().get_pieces())
         self.is_complete = False
+        
+        # Verify the piece count is non-zero
+        if self.total_pieces == 0:
+            print("Warning: Zero pieces detected in torrent file")
+            # You might want to raise an exception here
         
     def run(self):
         name = self.torrent_file.get_info().get_name() if self.torrent_file.get_info() else "Unknown"
@@ -90,10 +102,18 @@ class TorrentListItem(QWidget):
         progress_section.setSpacing(8)  # Increased spacing
         
         # Progress bar with increased height
+        # Progress bar with proper initialization
         self.progress_bar = QProgressBar()
         self.progress_bar.setMinimumHeight(20)
         self.progress_bar.setTextVisible(True)
         self.progress_bar.setFormat("%p% - %v/%m pieces")
+        # Initialize with actual piece count
+        total_pieces = len(torrent_file.get_info().get_pieces())
+        self.progress_bar.setMaximum(total_pieces)
+        self.progress_bar.setValue(0)
+        # Add debug logging
+        print(f"Debug - Progress bar initialized with {total_pieces} pieces")
+        
         self.progress_bar.setStyleSheet("""
             QProgressBar {
                 border: 2px solid #5E5E5E;
