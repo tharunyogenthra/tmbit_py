@@ -15,7 +15,7 @@ def parse_torrent_file(path: str) -> TorrentFile:
         try:
             torrent_file = TorrentFile()
             torrent_dict = bencoding.bdecode(unparsed_torrent.read())
-            torrent_file.set_announce(torrent_dict[b"announce"].decode())
+            torrent_file.set_announce(torrent_dict.get(b"announce", b"").decode())
 
             torrent_file.set_announce_list(
                 [
