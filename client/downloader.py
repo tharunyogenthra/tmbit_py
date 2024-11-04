@@ -148,7 +148,7 @@ def connect_to_peers(torrentFile: TorrentFile, progress_callback=None):
         progress_callback(f"Found {len(peers)} peers")
 
     socks = []
-    with ThreadPoolExecutor(max_workers=len(peers)) as executor:
+    with ThreadPoolExecutor(max_workers=100) as executor:
         futures = {
             executor.submit(
                 connect_to_single_peer, torrentFile, address, int(port), socks, progress_callback
