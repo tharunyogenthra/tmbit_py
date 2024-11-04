@@ -1,22 +1,31 @@
-### TODO
+# tmbit_py
 
-## IMPORTANT
+**tmbit_py** is an extremely lightweight, leech-only torrent client built for the **Extended Security Engineering and Cybersecurity (COMP6841)** course at **UNSW**. This client provides the fundamental features necessary for torrenting, with a focus on security and simplicity.
 
-- Actually check if the torrents have all the pieces available
-        - Make a queue system and only start downloading when all pieces are avaiable
+## Features
 
-- Make announce not once work with http but with udp and/or wss
-        - Maybe make an object storing all working announce links (this is important incase all peers in a tracker dont work)
+- **Bencode Parsing**: Parses `.torrent` files using the Bencode format.
+- **DHT Tracker Access**: Uses a decentralized tracker network, reducing dependency on centralized trackers.
+- **File Writing**: Writes files in the correct format, ensuring data accuracy.
+- **User-Friendly GUI**: Simple and sleek graphical interface for easy usage.
 
-- GUI ofc
+## Security Highlights
 
+- **Thread Safety**: Protects against concurrency-related vulnerabilities, ensuring safe, multi-threaded operation.
+- **Network Security**: Highlights access points and uses a decentralized tracker, reducing exposure to external networks.
+- **Data Integrity**: Ensures files are free from corruption after download.
 
-## LESS IMPORTANT
+# How to Run tmbit_py
 
-- Get multithreading working
-    - Or use python select to send reqs which mimicks it
-- Make sure the ping command works on a windows computer
-- Put everything in a docker container
-- More exception handling
-- More testing
-    
+To run the program, use the following commands in a terminal while inside the `tmbit_py` directory:
+
+MAC: `./dist/tmbit_py_mac` 
+
+WINDOWS: `dist\tmbit_py_windows.exe`  
+
+LINUX: `./dist/tmbit_py_linux`
+
+From here it’s quite intuitive using the GUI and the output will be written to a tmp_torrent directory in which you can 
+access all torrents downloaded using our client 
+
+# Usage Demonstration
