@@ -9,15 +9,15 @@ from client.downloader import download
 class DownloadThread(QThread):
     update_signal = pyqtSignal(str)  # For text updates
     progress_signal = pyqtSignal(int, int)  # For progress updates (current, total)
-    completed_signal = pyqtSignal()  # New signal for download completion
-
+    completed_signal = pyqtSignal(bool)  # Modified to include success status
+    
     def __init__(self, torrent_file):
         super().__init__()
         self.torrent_file = torrent_file
         self.current_piece = 0
         self.total_pieces = len(torrent_file.get_info().get_pieces())
         self.is_complete = False
-
+        
     def run(self):
         name = self.torrent_file.get_info().get_name() if self.torrent_file.get_info() else "Unknown"
         self.update_signal.emit(f"Starting download of {name}...")
@@ -31,15 +31,18 @@ class DownloadThread(QThread):
                     self.progress_signal.emit(self.current_piece, self.total_pieces)
                 elif message == "Download complete":
                     self.is_complete = True
-                    self.completed_signal.emit()
-                    return  # Exit callback after completion
+                    self.completed_signal.emit(True)  # Success
+                    return
                 
                 self.update_signal.emit(message)
             
             download(self.torrent_file, progress_callback)
             
         except Exception as e:
-            self.update_signal.emit(f"Error during download: {e}")
+            error_msg = f"Error during download: {e}"
+            self.update_signal.emit(error_msg)
+            self.completed_signal.emit(False)  # Failure
+
 
 class TorrentListItem(QWidget):
     def __init__(self, torrent_file, parent=None):
@@ -48,17 +51,19 @@ class TorrentListItem(QWidget):
         
         # Main layout with more padding
         layout = QVBoxLayout()
-        layout.setContentsMargins(10, 10, 10, 10)
-        layout.setSpacing(8)  # Increased spacing between elements
+        layout.setContentsMargins(15, 15, 15, 15)  # Increased margins
+        layout.setSpacing(12)  # Increased spacing between elements
         
         # Top section with name and size
         top_section = QVBoxLayout()
+        top_section.setSpacing(8)  # Increased spacing
         
         # Torrent name with larger, bold font
         name = torrent_file.get_info().get_name() if torrent_file.get_info() else "Unknown"
         self.name_label = QLabel(name)
         self.name_label.setStyleSheet("font-size: 14px; font-weight: bold;")
-        self.name_label.setWordWrap(True)  # Allow long names to wrap
+        self.name_label.setWordWrap(True)
+        self.name_label.setMinimumHeight(20)  # Minimum height for name
         top_section.addWidget(self.name_label)
         
         # Size information
@@ -66,23 +71,23 @@ class TorrentListItem(QWidget):
             size = torrent_file.get_info().get_piece_length()
             size_text = f"Size: {size} bytes"
             if float(size) / 1024 > 0.1:
-                size_text = f"Size: {size / 1024} kb"
+                size_text = f"Size: {size / 1024:.2f} KB"
             if float(size) / (1024 * 1024) > 0.1:
-                size_text = f"Size: {size / (1024 * 1024)} mb"
-
+                size_text = f"Size: {size / (1024 * 1024):.2f} MB"
         except:
-            size = torrent_file.get_length() // (1024 * 1024)  # Convert to MB
+            size = torrent_file.get_length() // (1024 * 1024)
             size_text = f"Size: Unknown"
         
         self.size_label = QLabel(size_text)
         self.size_label.setStyleSheet("color: #888888; font-size: 12px;")
+        self.size_label.setMinimumHeight(15)  # Minimum height for size
         top_section.addWidget(self.size_label)
         
         layout.addLayout(top_section)
         
         # Progress section
         progress_section = QVBoxLayout()
-        progress_section.setSpacing(4)
+        progress_section.setSpacing(8)  # Increased spacing
         
         # Progress bar with increased height
         self.progress_bar = QProgressBar()
@@ -96,6 +101,8 @@ class TorrentListItem(QWidget):
                 text-align: center;
                 background-color: #3E3E3E;
                 font-size: 12px;
+                margin-top: 5px;
+                margin-bottom: 5px;
             }
             QProgressBar::chunk {
                 background-color: #4CAF50;
@@ -107,10 +114,12 @@ class TorrentListItem(QWidget):
         
         # Status section with detailed information
         status_section = QHBoxLayout()
+        status_section.setSpacing(10)  # Increased spacing
         
         # Download speed
         self.speed_label = QLabel("Speed: --")
         self.speed_label.setStyleSheet("color: #888888;")
+        self.speed_label.setMinimumHeight(15)  # Minimum height
         status_section.addWidget(self.speed_label)
         
         # Spacer
@@ -119,6 +128,7 @@ class TorrentListItem(QWidget):
         # ETA
         self.eta_label = QLabel("ETA: --")
         self.eta_label.setStyleSheet("color: #888888;")
+        self.eta_label.setMinimumHeight(15)  # Minimum height
         status_section.addWidget(self.eta_label)
         
         progress_section.addLayout(status_section)
@@ -130,6 +140,7 @@ class TorrentListItem(QWidget):
                 color: #AAAAAA;
                 font-size: 12px;
                 padding: 4px;
+                min-height: 20px;
             }
         """)
         self.status_label.setWordWrap(True)
@@ -140,11 +151,12 @@ class TorrentListItem(QWidget):
         
         # Bottom section with buttons
         button_section = QHBoxLayout()
+        button_section.setContentsMargins(0, 10, 0, 10)  # Added vertical margins
         
         # Download button with improved styling
         self.download_button = QPushButton("Download")
         self.download_button.setMinimumWidth(120)
-        self.download_button.setMinimumHeight(30)
+        self.download_button.setMinimumHeight(35)  # Increased height
         self.download_button.setStyleSheet("""
             QPushButton {
                 background-color: #4CAF50;
@@ -152,6 +164,7 @@ class TorrentListItem(QWidget):
                 border-radius: 4px;
                 font-weight: bold;
                 font-size: 13px;
+                padding: 8px;
             }
             QPushButton:hover {
                 background-color: #45a049;
@@ -159,6 +172,12 @@ class TorrentListItem(QWidget):
             QPushButton:disabled {
                 background-color: #2E2E2E;
                 color: #666666;
+            }
+            QPushButton[error="true"] {
+                background-color: #f44336;
+            }
+            QPushButton[error="true"]:hover {
+                background-color: #da190b;
             }
         """)
         button_section.addStretch()
@@ -170,86 +189,89 @@ class TorrentListItem(QWidget):
         separator = QFrame()
         separator.setFrameShape(QFrame.HLine)
         separator.setFrameShadow(QFrame.Sunken)
-        separator.setStyleSheet("background-color: #5E5E5E;")
+        separator.setStyleSheet("""
+            QFrame {
+                background-color: #5E5E5E;
+                margin-top: 10px;
+            }
+        """)
         layout.addWidget(separator)
         
         self.setLayout(layout)
         
         # Set a fixed minimum height for consistent appearance
-        self.setMinimumHeight(200)
-    
-    def update_progress(self, current, total):
+        self.setMinimumHeight(250)  # Increased minimum height
+
+    def start_download(self):
+        """Called when download starts"""
+        self.download_button.setEnabled(False)
+        self.download_button.setText("Downloading...")
+        self.download_button.setProperty("error", False)
         self.progress_bar.show()
+        self.status_label.show()
+        self.progress_bar.setValue(0)
+    
+    def mark_error(self, error_message):
+        """Called when download encounters an error"""
+        self.download_button.setEnabled(True)
+        self.download_button.setText("Retry Download")
+        self.download_button.setProperty("error", True)
+        self.download_button.style().unpolish(self.download_button)
+        self.download_button.style().polish(self.download_button)
+        self.status_label.setText(error_message)
+        self.status_label.setStyleSheet("""
+            QLabel {
+                color: #f44336;
+                font-size: 12px;
+                padding: 4px;
+                min-height: 20px;
+            }
+        """)
+        self.speed_label.setText("Speed: --")
+        self.eta_label.setText("ETA: --")
+        
+    def update_status(self, message):
+        """Update status message and labels"""
+        self.status_label.setText(message)
+        
+        # Update speed if the message contains speed information
+        if "Speed:" in message:
+            self.speed_label.setText(message)
+        # Update ETA if the message contains ETA information
+        elif "ETA:" in message:
+            self.eta_label.setText(message)
+            
+    def update_progress(self, current, total):
+        """Update progress bar"""
         self.progress_bar.setMaximum(total)
         self.progress_bar.setValue(current)
         
-        # Update completion percentage
-        percentage = (current / total) * 100 if total > 0 else 0
-        self.speed_label.setText(f"Speed: {self._format_speed(1024*1024)}")  # Example speed
-        self.eta_label.setText(f"ETA: {self._format_eta(percentage)}")
-    
-    def update_status(self, status):
-        self.status_label.show()
-        self.status_label.setText(status)
-        
     def mark_complete(self):
-        self.download_button.setEnabled(False)
+        """Called when download completes"""
         self.download_button.setText("Download Complete")
-        self.download_button.setStyleSheet("""
-            QPushButton {
-                background-color: #45a049;
-                border: none;
-                border-radius: 4px;
-                font-weight: bold;
-                font-size: 13px;
-            }
-            QPushButton:disabled {
-                background-color: #45a049;
-                color: #FFFFFF;
-            }
-        """)
-        
-    def start_download(self):
         self.download_button.setEnabled(False)
-        self.download_button.setText("Downloading...")
-        self.progress_bar.show()
-        self.status_label.show()
-        self.speed_label.show()
-        self.eta_label.show()
-    
-    def _format_speed(self, bytes_per_sec):
-        if bytes_per_sec >= 1024*1024:
-            return f"{bytes_per_sec/(1024*1024):.1f} MB/s"
-        elif bytes_per_sec >= 1024:
-            return f"{bytes_per_sec/1024:.1f} KB/s"
-        return f"{bytes_per_sec:.1f} B/s"
-    
-    def _format_eta(self, percentage):
-        if percentage < 100:
-            remaining_seconds = (100 - percentage) * 60  # Example calculation
-            hours = int(remaining_seconds // 3600)
-            minutes = int((remaining_seconds % 3600) // 60)
-            if hours > 0:
-                return f"{hours}h {minutes}m"
-            return f"{minutes}m"
-        return "Complete"
+        self.status_label.setText("Download completed successfully!")
+        self.progress_bar.setValue(self.progress_bar.maximum())
+        self.speed_label.setText("Speed: 0 KB/s")
+        self.eta_label.setText("ETA: Complete")
 
 class FileSelectorApp(QWidget):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("tmbit_py")
-        self.setGeometry(100, 100, 1000, 800)  # Increased window size
+        self.setGeometry(100, 100, 1000, 800)
         
         # Main layout
         main_layout = QHBoxLayout()
-        main_layout.setSpacing(20)  # Increased spacing between panels
+        main_layout.setSpacing(20)
         
         # Left side - Torrent list and add button
         left_panel = QVBoxLayout()
-        left_panel.setSpacing(10)  # Increased spacing between elements
+        left_panel.setSpacing(15)  # Increased spacing
         
         # Header section
         header = QVBoxLayout()
+        header.setSpacing(10)  # Increased spacing
         
         # Title
         title = QLabel("Torrent Downloads")
@@ -278,16 +300,18 @@ class FileSelectorApp(QWidget):
         
         # Torrent list with improved styling
         self.torrent_list = QListWidget()
-        self.torrent_list.setMinimumWidth(400)  # Increased width
+        self.torrent_list.setMinimumWidth(400)
+        self.torrent_list.setSpacing(15)  # Add spacing between items
         self.torrent_list.setStyleSheet("""
             QListWidget {
                 background-color: #2E2E2E;
                 border: 1px solid #5E5E5E;
                 border-radius: 4px;
-                padding: 5px;
+                padding: 10px;
             }
             QListWidget::item {
                 padding: 5px;
+                margin-bottom: 10px;  /* Add margin between items */
             }
             QListWidget::item:selected {
                 background-color: #404040;
@@ -339,7 +363,11 @@ class FileSelectorApp(QWidget):
         self.setLayout(main_layout)
         
         # Initialize download threads dict
+        self.active_downloads = set()
         self.download_threads = {}
+        
+        # Add flag to track if a download is in progress
+        self.download_in_progress = False
         
         # Set the ratio between left and right panels (60:40)
         main_layout.setStretch(0, 60)
@@ -382,15 +410,71 @@ class FileSelectorApp(QWidget):
     def start_download(self, torrent_file, item_widget):
         name = torrent_file.get_info().get_name() if torrent_file.get_info() else "Unknown"
         
+        # Add to active downloads
+        self.active_downloads.add(name)
+        
+        # Create and configure download thread
         thread = DownloadThread(torrent_file)
         thread.update_signal.connect(self.output_display.append)
         thread.update_signal.connect(item_widget.update_status)
         thread.progress_signal.connect(item_widget.update_progress)
-        thread.completed_signal.connect(item_widget.mark_complete)  # Connect the completion signal
+        thread.completed_signal.connect(lambda success: self.handle_download_complete(name, success, item_widget))
         thread.start()
         
+        # Update UI
         item_widget.start_download()
         self.download_threads[name] = thread
+        
+        # Update download button states
+        self.update_download_buttons()
+    
+    def handle_download_complete(self, name, success, item_widget):
+        """Handle both successful and failed downloads"""
+        # Remove from active downloads
+        self.active_downloads.remove(name)
+        
+        if success:
+            item_widget.mark_complete()
+            self.output_display.append(f"Download completed successfully: {name}")
+        else:
+            item_widget.mark_error("Download failed. Click 'Retry Download' to try again.")
+            self.output_display.append(f"Download failed: {name}")
+        
+        # Clean up thread
+        if name in self.download_threads:
+            self.download_threads[name].deleteLater()
+            del self.download_threads[name]
+        
+        # Update download button states
+        self.update_download_buttons()
+    
+    def update_download_buttons(self):
+        """Update the state of all download buttons based on active downloads"""
+        max_concurrent_downloads = 1  # You can adjust this number for multiple concurrent downloads
+        
+        for i in range(self.torrent_list.count()):
+            list_item = self.torrent_list.item(i)
+            widget = self.torrent_list.itemWidget(list_item)
+            
+            # Skip if this widget is already downloading or completed
+            if widget.download_button.text() in ["Downloading...", "Download Complete"]:
+                continue
+            
+            # Enable/disable based on number of active downloads
+            can_download = len(self.active_downloads) < max_concurrent_downloads
+            widget.download_button.setEnabled(can_download)
+            
+            if not can_download and not widget.download_button.property("error"):
+                widget.download_button.setStyleSheet("""
+                    QPushButton {
+                        background-color: #2E2E2E;
+                        border: none;
+                        border-radius: 4px;
+                        font-weight: bold;
+                        font-size: 13px;
+                        color: #666666;
+                    }
+                """)
 
 def main():
     app = QApplication(sys.argv)
