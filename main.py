@@ -5,8 +5,8 @@ from client.tracker import tracker_request
 
 def main():
     
-    ptf = parse_torrent_file("tests/torrents/UnderTale6841.torrent")
-    tracker_request(ptf, duration=10)
+    ptf = parse_torrent_file("tests/torrents/bitcoin.torrent")
+    tracker_request(ptf)
     download(ptf)
     
     

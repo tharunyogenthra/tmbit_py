@@ -3,8 +3,8 @@ from PyQt5.QtWidgets import (QApplication, QWidget, QVBoxLayout, QHBoxLayout,
                            QListWidgetItem, QLabel, QFrame, QProgressBar)
 from PyQt5.QtCore import pyqtSignal, QThread, Qt
 import sys
-from .parse import parse_torrent_file
-from .downloader import download
+from client.parse import parse_torrent_file
+from client.downloader import download
 
 class DownloadThread(QThread):
     update_signal = pyqtSignal(str)  # For text updates
@@ -392,9 +392,9 @@ class FileSelectorApp(QWidget):
         item_widget.start_download()
         self.download_threads[name] = thread
 
-if __name__ == "__main__":
+def main():
     app = QApplication(sys.argv)
-    
+
     # Apply dark theme
     dark_stylesheet = """
         QWidget {
@@ -407,3 +407,6 @@ if __name__ == "__main__":
     window = FileSelectorApp()
     window.show()
     sys.exit(app.exec_())
+
+if __name__ == "__main__":
+    main()
